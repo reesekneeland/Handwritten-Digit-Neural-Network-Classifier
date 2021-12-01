@@ -1,11 +1,16 @@
 import numpy as np
+import requests, gzip, os, hashlib
+
 
 
 class NeuralNetwork:
 
     def __init__(self, layer_sizes):
-        weight_shapes = [(a,b) for a,b in zip(layer_sizes[1:],layer_sizes[:-1])]
-        self.weights = [np.random.standard_normal(s)/s[1]**.5 for s in weight_shapes]
+        self.weights = [[], []]
+        self.weights[0] = self.randomize(layer_sizes[0], layer_sizes[1])
+        self.weights[1] = self.randomize(layer_sizes[1], layer_sizes[2])
+        
+        print(np.shape(self.weights[0]), np.shape(self.weights[1]))
         self.learning_rate = 0.001
         self.epochs = 10000
         self.batch = 128
@@ -13,6 +18,10 @@ class NeuralNetwork:
     #sigmoid function
     def sigmoid(self, x):
         return 1/(np.exp(-x)+1)    
+
+    def randomize(self, x,y):
+        layer=np.random.uniform(-1.,1.,size=(x,y))/np.sqrt(x*y)
+        return layer.astype(np.float32)
 
     #derivative of sigmoid
     def d_sigmoid(self, x):
@@ -30,16 +39,18 @@ class NeuralNetwork:
 
     #forward and backward pass
     def forward_backward_pass(self, x,y):
-        targets = y.reshape((128, 10))
-        x_l1=x.dot(self.weights[0].T)
+        targets = np.zeros((len(y),10), np.float32)
+        targets[range(targets.shape[0]),y] = 1
+
+        x_l1=x.dot(self.weights[0])
         x_sigmoid=self.sigmoid(x_l1)
-        x_l2=x_sigmoid.dot(self.weights[1].T)
+        x_l2=x_sigmoid.dot(self.weights[1])
         out=self.softmax(x_l2)
         error=2*(out-targets)/out.shape[0]*(self.d_softmax(x_l2))
         update_l2=x_sigmoid.T@error
         
         
-        error=((self.weights[1].T).dot(error.T)).T*self.d_sigmoid(x_l1)
+        error=((self.weights[1]).dot(error.T)).T*self.d_sigmoid(x_l1)
         update_l1=x.T@error
 
         
@@ -61,13 +72,13 @@ class NeuralNetwork:
             loss=((category-y)**2).mean()
             self.losses.append(loss.item())
 
-            self.weights[0] = self.weights[0] - self.learning_rate * update_l1.T
-            self.weights[1] = self.weights[1] - self.learning_rate * update_l2.T
+            self.weights[0] = self.weights[0] - self.learning_rate * update_l1
+            self.weights[1] = self.weights[1] - self.learning_rate * update_l2
 
             #testing our model using the validation set every 30 epochs
             if(i%30==0):    
                 X_val=X_val.reshape((-1,28*28))
-                val_out=np.argmax(self.softmax(self.sigmoid(X_val.dot(self.weights[0].T)).dot(self.weights[1].T)),axis=1)
+                val_out=np.argmax(self.softmax(self.sigmoid(X_val.dot(self.weights[0])).dot(self.weights[1])),axis=1)
                 val_acc=(val_out==Y_val).mean()
                 self.val_accuracies.append(val_acc.item())
             if(i%500==0): 
@@ -77,9 +88,3 @@ class NeuralNetwork:
         test_out=np.argmax(self.softmax(self.sigmoid(X_test.dot(self.weights[0])).dot(self.weights[1])),axis=1)
         test_acc=(test_out==Y_test).mean().item()
         print(f'Test accuracy = {test_acc:.4f}')
-        np.savez('weights',self.weights[0],self.weights[1])
-
-    def print_accuracy(self, images, labels):
-        plt.ylim(-0.1, 1.1)
-        plot(self.accuracies)
-        plot(self.val_accuracies)
